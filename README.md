@@ -1,27 +1,30 @@
 # IPED MCP
 
-Servidor MCP (Model Context Protocol) para usar casos **IPED processados** em linguagem natural a partir
-do Claude (Code ou Desktop), do Hermes Agent ou de qualquer cliente MCP. Usa a API REST padrão do IPED e
-funciona com qualquer evidência (imagem de disco, UFDR, pastas).
+[Português](README.md) | **English**
 
-Para ler relatórios UFDR da Cellebrite direto do `.ufdr`, sem IPED, use o projeto separado `ufdr-mcp`.
+MCP (Model Context Protocol) server for working with **processed IPED cases** in natural language from
+Claude (Code or Desktop), Hermes Agent or any other MCP client. It uses IPED's standard REST API and
+works with any kind of evidence (disk images, UFDR, folders).
+
+To read Cellebrite UFDR reports straight from the `.ufdr` file, without IPED, use the separate
+`ufdr-mcp` project.
 
 ---
 
-## 1. Instalação
+## 1. Installation
 
-Requisitos:
+Requirements:
 
-- Python 3.11+ e [`uv`](https://github.com/astral-sh/uv)
-- Para o `iped-mcp`: um caso já processado pelo IPED (4.x). O Java vem junto com o caso
-  (`iped/jre`); sem ele, é usado o `JAVA_HOME` ou o `java` do `PATH` (Java 11+).
+- Python 3.11+ and [`uv`](https://github.com/astral-sh/uv)
+- For `iped-mcp`: a case already processed by IPED (4.x). Java ships with the case (`iped/jre`);
+  without it, `JAVA_HOME` or the `java` on the `PATH` is used (Java 11+).
 
 ```bash
-cd D:/workspace/iped_mcp          # ou /home/silvio/Documentos/workspace/git/iped_mcp
+cd D:/workspace/iped_mcp          # or /home/silvio/Documentos/workspace/git/iped_mcp
 uv sync
 ```
 
-Teste rápido (deve listar as ferramentas e mostrar as estatísticas do caso):
+Quick test (should list the tools and show the case statistics):
 
 ```bash
 uv run python iped_mcp_client.py --case-path F:/IMAGENS_PROCESSADAS/iphone list-tools
@@ -30,53 +33,54 @@ uv run python iped_mcp_client.py --case-path F:/IMAGENS_PROCESSADAS/iphone call 
 
 ---
 
-## 2. Iniciando o iped-mcp
+## 2. Starting iped-mcp
 
 ```bash
-uv run iped-mcp                      # sem caso: o caso é escolhido na conversa (recomendado)
-uv run iped-mcp --case-path <caso>   # já abre num caso fixo
+uv run iped-mcp                      # no case: the case is chosen in the conversation (recommended)
+uv run iped-mcp --case-path <case>   # opens a fixed case right away
 ```
 
-O servidor inicia sem caso, e o caso é carregado durante a conversa pela ferramenta `add_case`
-(*"carregue o caso F:/IMAGENS_PROCESSADAS/iphone"*). Assim, a configuração do cliente MCP é a mesma para
-qualquer caso. Para trocar de caso na mesma sessão, `close_case` descarrega o atual
-(*"feche o caso atual e abra F:/IMAGENS_PROCESSADAS/outro"*).
+The server starts with no case, and the case is loaded during the conversation through the `add_case`
+tool (*"load the case F:/IMAGENS_PROCESSADAS/iphone"*). This way, the MCP client configuration is the
+same for every case. To switch cases in the same session, `close_case` unloads the current one
+(*"close the current case and open F:/IMAGENS_PROCESSADAS/other"*).
 
-`<caso>` é a **raiz do caso processado**, a pasta que contém `iped/` (ex.: `F:/IMAGENS_PROCESSADAS/iphone`).
-A própria pasta `iped/` também é aceita.
+`<case>` is the **root of the processed case**, the folder that contains `iped/`
+(e.g. `F:/IMAGENS_PROCESSADAS/iphone`). The `iped/` folder itself is also accepted.
 
-O servidor conversa por stdio. Quem o inicia normalmente é o cliente MCP (seção 4), e não você.
-Rodando manualmente, ele fica parado esperando mensagens; isso é o esperado.
+The server talks over stdio. It is normally started by the MCP client (section 4), not by you.
+When run manually, it just sits waiting for messages; that is expected.
 
-### Como funciona
+### How it works
 
 ```
-Cliente MCP ──stdio──> iped-mcp ──HTTP (127.0.0.1)──> API REST do IPED (Java) ──> iped/index do caso
-                                                     iped.engine.webapi.Main     + evidência original
+MCP client ──stdio──> iped-mcp ──HTTP (127.0.0.1)──> IPED REST API (Java) ──> case iped/index
+                                                     iped.engine.webapi.Main   + original evidence
 ```
 
-1. Ao carregar o caso (`add_case`, ou na primeira chamada com `--case-path`), o `iped-mcp` inicia
-   a API REST padrão do IPED (`iped.engine.webapi.Main`, que vem em `iped/lib` de todo caso). Ela roda com o Java do próprio caso
-   numa porta local livre. No caso de teste (1,4 milhão de itens), a API fica pronta em cerca de 4 s.
-2. As ferramentas viram consultas HTTP à API: busca no índice, propriedades, texto, conteúdo e marcadores.
-3. Ao fechar o cliente, a API é encerrada junto.
+1. When the case is loaded (`add_case`, or the first call with `--case-path`), `iped-mcp` starts IPED's
+   standard REST API (`iped.engine.webapi.Main`, shipped in `iped/lib` of every case). It runs with the
+   case's own Java on a free local port. On the test case (1.4 million items), the API is ready in
+   about 4 s.
+2. Tools become HTTP queries to the API: index search, properties, text, content and bookmarks.
+3. When the client closes, the API is shut down with it.
 
-### Opções
+### Options
 
-| Opção | Descrição |
-|-------|-----------|
-| `--case-path <caso>` | Opcional: caso a carregar já na inicialização. Pode repetir para vários casos |
-| `--api-url <url>` | Usar uma API do IPED já em execução (ex.: em outra máquina) em vez de iniciar uma |
-| `--java-opts "-Xmx8g"` | Opções da JVM da API (memória em casos grandes) |
-| `--allow-write` | Libera as ferramentas que **alteram marcadores** do caso (desligado por padrão) |
-| `--eager` | Inicia a API já na inicialização, e não na primeira chamada |
+| Option | Description |
+|--------|-------------|
+| `--case-path <case>` | Optional: case to load at startup. Can be repeated for several cases |
+| `--api-url <url>` | Use an IPED API that is already running (e.g. on another machine) instead of starting one |
+| `--java-opts "-Xmx8g"` | JVM options for the API (memory for large cases) |
+| `--allow-write` | Enables the tools that **change the case bookmarks** (off by default) |
+| `--eager` | Starts the API at startup instead of on the first call |
 
-Variáveis de ambiente equivalentes: `IPED_API_URL` e `IPED_JAVA_OPTS`.
+Equivalent environment variables: `IPED_API_URL` and `IPED_JAVA_OPTS`.
 
-### Usar uma API do IPED já em execução (opcional)
+### Using an IPED API that is already running (optional)
 
-Para compartilhar uma API entre vários clientes, ou deixá-la num servidor, inicie-a manualmente.
-O arquivo `sources.json` lista os casos:
+To share one API between several clients, or keep it on a server, start it manually.
+The `sources.json` file lists the cases:
 
 ```json
 [{"id": "iphone", "path": "F:/IMAGENS_PROCESSADAS/iphone"}]
@@ -87,114 +91,115 @@ cd F:/IMAGENS_PROCESSADAS/iphone/iped
 jre/bin/java -Xmx8g -cp "lib/*" iped.engine.webapi.Main --sources=sources.json --host=127.0.0.1 --port=8080
 ```
 
-Depois, aponte o MCP para ela: `uv run iped-mcp --api-url http://127.0.0.1:8080`.
-A documentação da API fica em `http://127.0.0.1:8080/swagger.json`.
+Then point the MCP server at it: `uv run iped-mcp --api-url http://127.0.0.1:8080`.
+The API documentation is at `http://127.0.0.1:8080/swagger.json`.
 
-> A API não tem autenticação. Use `--host=127.0.0.1` ou restrinja o acesso pela rede.
+> The API has no authentication. Use `--host=127.0.0.1` or restrict network access.
 
 ---
 
-## 3. Usando
+## 3. Usage
 
-Depois de integrar a um cliente (seção 4), basta conversar. Comece indicando o caso:
+Once the server is set up in a client (section 4), just talk to it. Start by telling it the case:
 
-- *"Carregue o caso F:/IMAGENS_PROCESSADAS/iphone"* → `add_case`
-- *"Feche o caso atual e abra F:/IMAGENS_PROCESSADAS/outro"* → `close_case` + `add_case`
-- *"Carregue também F:/IMAGENS_PROCESSADAS/outro"* → `add_case` (consulta os dois casos juntos)
+- *"Load the case F:/IMAGENS_PROCESSADAS/iphone"* → `add_case`
+- *"Close the current case and open F:/IMAGENS_PROCESSADAS/other"* → `close_case` + `add_case`
+- *"Also load F:/IMAGENS_PROCESSADAS/other"* → `add_case` (queries both cases together)
 
-Depois, pergunte sobre o caso:
+Then ask about the case:
 
-- *"Resuma o caso: quantos itens, quantos apagados, quais categorias?"* → `get_stats`
-- *"Busque 'pix' e mostre os 20 primeiros resultados"* → `search`
-- *"Quais chamadas telefônicas existem? Alguma apagada?"* → `search_by_category`
-- *"Esse hash está no caso? 0f260eb0bf64143726b85412582a0cfe"* → `search_by_hash`
-- *"Mostre todos os metadados do item 69759"* → `get_document`
-- *"Leia o texto do item 222686"* → `get_document_text`
-- *"Exporte o item 232401 para D:/saida e confira o hash"* → `export_document`
-- *"Liste as fotos modificadas em abril de 2026"* → `search` com `type:jpg AND modified:[2026-04-01 TO 2026-04-30]`
+- *"Summarize the case: how many items, how many deleted, which categories?"* → `get_stats`
+- *"Search for 'pix' and show the first 20 results"* → `search`
+- *"Which phone calls are there? Any deleted?"* → `search_by_category`
+- *"Is this hash in the case? 0f260eb0bf64143726b85412582a0cfe"* → `search_by_hash`
+- *"Show all the metadata of item 69759"* → `get_document`
+- *"Read the text of item 222686"* → `get_document_text`
+- *"Export item 232401 to D:/output and check the hash"* → `export_document`
+- *"List the photos modified in April 2026"* → `search` with `type:jpg AND modified:[2026-04-01 TO 2026-04-30]`
 
-### Ferramentas do iped-mcp
+### iped-mcp tools
 
-Cada item é identificado por `(source_id, id)`. Com um só caso carregado, `source_id` pode ser omitido.
-As listagens retornam `total`/`returned` e paginam com `limit`/`offset`.
+Each item is identified by `(source_id, id)`. With a single case loaded, `source_id` can be omitted.
+Listings return `total`/`returned` and are paged with `limit`/`offset`.
 
-| Ferramenta | Descrição |
-|------------|-----------|
-| `get_case_info()` | Casos carregados, URL da API, Java usado e caminho do log |
-| `list_sources()` / `add_case(path, source_id)` | Listar casos / carregar outro caso |
-| `close_case(source_id)` | Descarregar um caso (ou todos, sem `source_id`) para abrir outro |
-| `list_categories()` | Categorias do caso |
-| `get_stats(refresh)` | Total de itens, apagados, recuperados (carved) e contagem por categoria |
-| `search(query, source_id, limit, offset, details)` | Busca com a sintaxe do IPED (veja abaixo) |
-| `count(query, source_id)` | Só a contagem de uma consulta |
-| `search_by_category(category)` | Itens de uma categoria |
-| `search_by_hash(hash_value)` | Busca por MD5, SHA-1 ou SHA-256 |
-| `get_children(doc_id)` | Filhos de uma pasta ou container (anexos, itens extraídos) |
-| `get_document(doc_id, all_properties)` | Metadados resumidos ou todas as propriedades (`ufed:*`, EXIF...) |
-| `get_document_text(doc_id, offset, max_chars)` | Texto extraído, lido em partes |
-| `export_document(doc_id, output_dir, thumbnail)` | Exporta o conteúdo (confere com o MD5 do caso: `hash_ok`) ou a miniatura |
-| `list_bookmarks()` / `get_bookmark_items(bookmark)` | Marcadores e seus itens |
-| `create_bookmark` / `add_to_bookmark` / `remove_from_bookmark` | Alteram marcadores (exigem `--allow-write`) |
+| Tool | Description |
+|------|-------------|
+| `get_case_info()` | Loaded cases, API URL, Java in use and log path |
+| `list_sources()` / `add_case(path, source_id)` | List cases / load another case |
+| `close_case(source_id)` | Unload a case (or all of them, without `source_id`) to open another |
+| `list_categories()` | Case categories |
+| `get_stats(refresh)` | Total items, deleted, carved and count per category |
+| `search(query, source_id, limit, offset, details)` | Search with IPED syntax (see below) |
+| `count(query, source_id)` | Only the count for a query |
+| `search_by_category(category)` | Items in a category |
+| `search_by_hash(hash_value)` | Search by MD5, SHA-1 or SHA-256 |
+| `get_children(doc_id)` | Children of a folder or container (attachments, extracted items) |
+| `get_document(doc_id, all_properties)` | Summary metadata or all properties (`ufed:*`, EXIF...) |
+| `get_document_text(doc_id, offset, max_chars)` | Extracted text, read in chunks |
+| `export_document(doc_id, output_dir, thumbnail)` | Exports the content (checked against the case MD5: `hash_ok`) or the thumbnail |
+| `list_bookmarks()` / `get_bookmark_items(bookmark)` | Bookmarks and their items |
+| `create_bookmark` / `add_to_bookmark` / `remove_from_bookmark` | Change bookmarks (require `--allow-write`) |
 
-### Sintaxe de busca (IPED/Lucene)
+### Search syntax (IPED/Lucene)
 
-| Consulta | Significado |
-|----------|-------------|
-| `pix` | palavra no texto ou nos metadados |
-| `"conta corrente"` | frase exata |
-| `category:"Phone Calls"` | por categoria (veja `list_categories`) |
-| `type:jpg` / `name:WhatsApp*` | por extensão / nome com curinga |
-| `deleted:true` / `carved:true` | apagados / recuperados |
-| `size:[1000000 TO *]` | faixa de tamanho em bytes |
-| `modified:[2026-04-01 TO 2026-04-30]` | faixa de datas (`created`, `accessed` e `modified`) |
-| `parentId:2008` | filhos de um item |
-| `type:jpg AND NOT deleted:true` | combinações com `AND` / `OR` / `NOT` |
-| `*` | tudo |
+| Query | Meaning |
+|-------|---------|
+| `pix` | word in the text or metadata |
+| `"conta corrente"` | exact phrase |
+| `category:"Phone Calls"` | by category (see `list_categories`) |
+| `type:jpg` / `name:WhatsApp*` | by extension / name with wildcard |
+| `deleted:true` / `carved:true` | deleted / carved |
+| `size:[1000000 TO *]` | size range in bytes |
+| `modified:[2026-04-01 TO 2026-04-30]` | date range (`created`, `accessed` and `modified`) |
+| `parentId:2008` | children of an item |
+| `type:jpg AND NOT deleted:true` | combinations with `AND` / `OR` / `NOT` |
+| `*` | everything |
 
-Em nomes de campo, escape `:` e `-` com `\`: `ufed\:Source:WhatsApp`, `sha\-256:<hash>`.
+In field names, escape `:` and `-` with `\`: `ufed\:Source:WhatsApp`, `sha\-256:<hash>`.
 
-### Cliente de linha de comando
+### Command-line client
 
 ```bash
-# IPED
-uv run python iped_mcp_client.py --case-path <caso> list-tools
-uv run python iped_mcp_client.py --case-path <caso> call get_stats "{}"
-uv run python iped_mcp_client.py --case-path <caso> call search '{"query": "deleted:true", "limit": 5}'
+uv run python iped_mcp_client.py --case-path <case> list-tools
+uv run python iped_mcp_client.py --case-path <case> call get_stats "{}"
+uv run python iped_mcp_client.py --case-path <case> call search '{"query": "deleted:true", "limit": 5}'
 ```
 
-> No PowerShell, o JSON entre aspas simples precisa de aspas internas escapadas
-> (`'{\"query\": \"pix\"}'`). Prefira o Git Bash, ou use a biblioteca Python.
+> In PowerShell, JSON inside single quotes needs its inner quotes escaped
+> (`'{\"query\": \"pix\"}'`). Prefer Git Bash, or use the Python library.
 
 ---
 
-## 4. Integração com clientes MCP
+## 4. MCP client integration
 
-A configuração é **uma só, para qualquer caso e qualquer cliente**. O servidor inicia sem caso, e o caso
-é escolhido na conversa (`add_case` / `close_case`, seção 3). Em todos os clientes, o comando é o mesmo:
+There is **a single configuration for every case and every client**. The server starts with no case,
+and the case is chosen in the conversation (`add_case` / `close_case`, section 3). The command is the
+same in every client:
 
 ```
 uv run --directory D:/workspace/iped_mcp iped-mcp
 ```
 
-O que muda de um cliente para outro é só onde esse comando fica registrado. Nos exemplos abaixo, troque
-`D:/workspace/iped_mcp` pela pasta do projeto (no Linux, `/home/silvio/Documentos/workspace/git/iped_mcp`).
-As opções da seção 2 (`--java-opts`, `--allow-write`...) vão no fim do comando, ou nos `args`.
+The only thing that changes between clients is where that command is registered. In the examples below,
+replace `D:/workspace/iped_mcp` with the project folder (on Linux,
+`/home/silvio/Documentos/workspace/git/iped_mcp`). The options from section 2 (`--java-opts`,
+`--allow-write`...) go at the end of the command, or in `args`.
 
 ### Claude Code
 
 ```bash
 claude mcp add -s user iped -- uv run --directory D:/workspace/iped_mcp iped-mcp
 
-# Conferir
+# Check
 claude mcp list
 ```
 
-- `-s user` deixa o servidor disponível em todos os projetos, configurado uma vez só. Use `-s project`
-  para gravar num `.mcp.json` versionável na pasta atual.
-- Dentro do Claude Code, `/mcp` mostra o estado dos servidores e as ferramentas.
+- `-s user` makes the server available in every project, configured only once. Use `-s project` to
+  write it to a `.mcp.json` in the current folder that can be committed.
+- Inside Claude Code, `/mcp` shows the server status and its tools.
 
-Arquivo `.mcp.json` equivalente (na raiz do projeto onde você roda o `claude`), o mesmo do
-`mcp_config.json` deste repositório:
+Equivalent `.mcp.json` file (at the root of the project where you run `claude`), the same as this
+repository's `mcp_config.json`:
 
 ```json
 {
@@ -209,19 +214,19 @@ Arquivo `.mcp.json` equivalente (na raiz do projeto onde você roda o `claude`),
 
 ### Claude Desktop
 
-Edite o `claude_desktop_config.json`:
+Edit `claude_desktop_config.json`:
 
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-O conteúdo é o mesmo bloco `mcpServers` do `.mcp.json` acima (ou do `mcp_config.json`, ajustando o
-caminho do projeto). Reinicie o Claude Desktop depois de salvar. Se o `uv` não estiver no `PATH` do
-aplicativo, use o caminho completo em `"command"` (ex.: `"C:/Users/Silvio/.local/bin/uv.exe"`).
+The content is the same `mcpServers` block as the `.mcp.json` above (or `mcp_config.json`, adjusting the
+project path). Restart Claude Desktop after saving. If `uv` is not on the app's `PATH`, use the full path
+in `"command"` (e.g. `"C:/Users/Silvio/.local/bin/uv.exe"`).
 
 ### Hermes Agent
 
-O Hermes Agent carrega servidores MCP declarados no arquivo de configuração dele
-(`~/.hermes/config.yaml`, seção `mcp_servers`):
+Hermes Agent loads the MCP servers declared in its configuration file
+(`~/.hermes/config.yaml`, `mcp_servers` section):
 
 ```yaml
 mcp_servers:
@@ -232,12 +237,12 @@ mcp_servers:
       IPED_JAVA_OPTS: "-Xmx8g"
 ```
 
-Reinicie o Hermes. As ferramentas aparecem no toolbox do agente; para conferir, peça
-*"liste as ferramentas IPED disponíveis"*. Se a sua versão do Hermes usar um arquivo JSON de servidores
-MCP, o formato é o mesmo `mcpServers` do `mcp_config.json`. Mais detalhes e o uso via
-`execute_code` estão em [`INTEGRACAO_HERMES.md`](INTEGRACAO_HERMES.md).
+Restart Hermes. The tools show up in the agent's toolbox; to check, ask
+*"list the available IPED tools"*. If your Hermes version uses a JSON file for MCP servers, the format is
+the same `mcpServers` block as `mcp_config.json`. More details, and usage through `execute_code`, are in
+[`INTEGRACAO_HERMES.md`](INTEGRACAO_HERMES.md) (in Portuguese).
 
-Sem MCP nativo, o agente pode usar o cliente como biblioteca Python:
+Without native MCP, the agent can use the client as a Python library:
 
 ```python
 from iped_mcp_client import IpedMCPClient
@@ -247,65 +252,65 @@ with IpedMCPClient("F:/IMAGENS_PROCESSADAS/iphone") as client:
     print(client.call_tool("search", {"query": 'category:"Phone Calls"', "limit": 10}))
 ```
 
-### Outros clientes
+### Other clients
 
-Cursor, VS Code e a maioria dos clientes MCP usam o mesmo bloco `mcpServers` do `mcp_config.json`;
-muda só o caminho do arquivo de configuração de cada um. Qualquer cliente MCP por stdio funciona com
-`uv run --directory <projeto> iped-mcp`.
+Cursor, VS Code and most MCP clients use the same `mcpServers` block as `mcp_config.json`; only the
+location of each one's configuration file changes. Any stdio MCP client works with
+`uv run --directory <project> iped-mcp`.
 
-### Caso fixo (opcional)
+### Fixed case (optional)
 
-Para um agente que sempre abre no mesmo caso, acrescente `--case-path <caso>` ao comando
-(ou `"--case-path", "<caso>"` aos `args`). Ainda assim, dá para trocar de caso pela conversa.
+For an agent that always opens the same case, add `--case-path <case>` to the command
+(or `"--case-path", "<case>"` to `args`). You can still switch cases through the conversation.
 
-### Dicas
+### Tips
 
-- **Carregamento mais lento:** a API do IPED é iniciada no `add_case` (ou na primeira chamada). Em casos muito grandes, use `--eager`
-  ou aumente o timeout de ferramentas do cliente.
-- **Evidência original:** para exportar conteúdo e extrair texto, a evidência (o `.ufdr`, a imagem...)
-  precisa estar acessível no caminho gravado no caso. Os metadados e a busca funcionam mesmo sem ela.
-- **Marcadores protegidos:** por padrão o servidor não altera nada no caso. Habilite `--allow-write`
-  só se quiser que o agente crie ou edite marcadores.
-- **Log da API:** o caminho aparece em `get_case_info` (`webapi_log`). É útil se a API não iniciar.
+- **Slower loading:** the IPED API is started on `add_case` (or on the first call). For very large
+  cases, use `--eager` or increase the client's tool timeout.
+- **Original evidence:** to export content and extract text, the evidence (the `.ufdr`, the image...)
+  must be reachable at the path recorded in the case. Metadata and search work even without it.
+- **Protected bookmarks:** by default the server does not change anything in the case. Enable
+  `--allow-write` only if you want the agent to create or edit bookmarks.
+- **API log:** its path is shown by `get_case_info` (`webapi_log`). Useful if the API does not start.
 
 ---
 
-## 5. Como biblioteca Python
+## 5. As a Python library
 
 ```python
 from iped_mcp import CaseConfig, WebAPIServer
 
-# IPED: sobe a API REST do próprio caso e consulta
+# Starts the case's own REST API and queries it
 server = WebAPIServer([CaseConfig("F:/IMAGENS_PROCESSADAS/iphone")])
 api = server.start()
-ids = api.search('category:"Phone Calls"')        # [(fonte, id), ...]
-doc = api.get_document(*ids[0])                    # propriedades do item
+ids = api.search('category:"Phone Calls"')        # [(source, id), ...]
+doc = api.get_document(*ids[0])                    # item properties
 print(api.get_text(*ids[0])["text"])
 server.stop()
 ```
 
 ---
 
-## 6. Estrutura
+## 6. Layout
 
 ```
 iped_mcp/
-├── pyproject.toml      # Projeto uv (entry point iped-mcp)
-├── iped_mcp/           # Servidor MCP
-│   ├── main.py         # Servidor MCP (ferramentas)
-│   ├── config.py       # Localização do caso, de iped/lib e do Java
-│   └── webapi.py       # Cliente e inicializador da API REST do IPED
-├── iped_mcp_client.py  # Cliente CLI/biblioteca
-├── mcp_config.json     # Exemplo de configuração para clientes MCP
+├── pyproject.toml      # uv project (iped-mcp entry point)
+├── iped_mcp/           # MCP server
+│   ├── main.py         # MCP server (tools)
+│   ├── config.py       # Locates the case, iped/lib and Java
+│   └── webapi.py       # IPED REST API client and launcher
+├── iped_mcp_client.py  # CLI client / library
+├── mcp_config.json     # Example configuration for MCP clients
 └── tests/
 ```
 
-## 7. Testes
+## 7. Tests
 
 ```bash
 uv run pytest tests/ -v
-# integração com um caso IPED real (sobe a API do caso)
+# integration with a real IPED case (starts the case's API)
 IPED_TEST_CASE=F:/IMAGENS_PROCESSADAS/iphone uv run pytest tests/ -v -k real_case
 ```
 
-Os testes unitários usam uma API IPED simulada e não precisam de Java nem de caso.
+The unit tests use a mock IPED API and need neither Java nor a case.
