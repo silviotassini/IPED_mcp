@@ -1,6 +1,6 @@
 # IPED MCP
 
-[Português](README.md) | **English**
+[Português](README.PT-BR.md) | **English**
 
 MCP (Model Context Protocol) server for working with **processed IPED cases** in natural language from
 Claude (Code or Desktop), Hermes Agent or any other MCP client. It uses IPED's standard REST API and
