@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "iped": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/home/silvio/Documentos/workspace/git/iped_mcp",
+        "iped-mcp"
+      ]
+    }
+  }
+}

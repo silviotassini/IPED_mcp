@@ -1,0 +1,9 @@
+# Configuração do IPED MCP
+#
+# O iped-mcp é configurado pela linha de comando:
+#   iped-mcp --case-path <caso> [--case-path <outro caso>] [--java-opts "-Xmx8g"] [--allow-write]
+#   iped-mcp --api-url http://127.0.0.1:8080        # API do IPED já em execução
+#
+# <caso> é a raiz do caso processado (a pasta que contém 'iped/') ou a própria pasta 'iped/'.
+# O servidor usa a API REST padrão do IPED (iped/lib) com o Java do caso (iped/jre),
+# ou JAVA_HOME/PATH. Variáveis de ambiente equivalentes: IPED_API_URL, IPED_JAVA_OPTS.

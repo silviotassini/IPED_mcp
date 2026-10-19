@@ -1,0 +1,25 @@
+[project]
+name = "iped-mcp"
+version = "0.1.0"
+description = "Servidor MCP para casos IPED, via a API REST padrão do IPED"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.0",
+    "requests>=2.31",
+]
+
+[project.scripts]
+iped-mcp = "iped_mcp.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["iped_mcp"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
