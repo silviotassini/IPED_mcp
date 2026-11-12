@@ -36,6 +36,10 @@ class IPEDAPIError(RuntimeError):
     """Erro devolvido pela API do IPED (ou falha ao iniciá-la)."""
 
 
+class IPEDAPIUnavailable(IPEDAPIError):
+    """A API não aceita conexões (processo Java encerrado ou porta errada)."""
+
+
 def _q(segment) -> str:
     return quote(str(segment), safe="")
 
@@ -61,6 +65,11 @@ class IPEDWebAPI:
         try:
             resp = self.session.request(method, f"{self.base_url}/{path}",
                                         timeout=kwargs.pop("timeout", self.timeout), **kwargs)
+        except requests.ConnectionError as e:
+            raise IPEDAPIUnavailable(f"API do IPED inacessível em {self.base_url}: {e}") from e
+        except requests.Timeout as e:
+            raise IPEDAPIError(f"A API do IPED não respondeu em {self.timeout:.0f}s ({path}); "
+                               f"ela continua ativa, a operação é que é lenta.") from e
         except requests.RequestException as e:
             raise IPEDAPIError(f"API do IPED inacessível em {self.base_url}: {e}") from e
         if resp.status_code >= 400:
@@ -96,6 +105,8 @@ class IPEDWebAPI:
         """Executar uma consulta (sintaxe de busca do IPED/Lucene). Retorna (fonte, id)."""
         try:
             data = self._get_json("search", q=query, sourceID=source_id)["data"]
+        except IPEDAPIUnavailable:
+            raise
         except IPEDAPIError as e:
             raise IPEDAPIError(f"Falha na busca {query!r} (sintaxe inválida ou fonte inexistente?) — {e}") from e
         return [(group["source"], doc_id) for group in data for doc_id in group["ids"]]
@@ -105,6 +116,8 @@ class IPEDWebAPI:
     def get_document(self, source_id: str, doc_id: int) -> dict:
         try:
             return self._get_json(f"sources/{_q(source_id)}/docs/{int(doc_id)}")
+        except IPEDAPIUnavailable:
+            raise
         except IPEDAPIError as e:
             raise IPEDAPIError(f"Item {doc_id} não encontrado na fonte {source_id!r} — {e}") from e
 
@@ -202,7 +215,9 @@ class WebAPIServer:
         sources_file.write_text(json.dumps([c.to_source() for c in self.cases]), encoding="utf-8")
         # O próprio Java expande "lib/*" no classpath
         classpath = str(self.cases[0].lib_dir / "*")
-        return [self.java, *self.java_opts, "-cp", classpath, WEBAPI_MAIN_CLASS,
+        # Crash nativo da JVM (Sleuthkit, JEP...) gera o relatório junto do log
+        error_file = f"-XX:ErrorFile={self.workdir / 'hs_err_pid%p.log'}"
+        return [self.java, error_file, *self.java_opts, "-cp", classpath, WEBAPI_MAIN_CLASS,
                 f"--sources={sources_file}", f"--host={self.host}", f"--port={self.port}"]
 
     def log_tail(self, lines: int = 30) -> str:
@@ -210,6 +225,29 @@ class WebAPIServer:
             return "\n".join(self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
         except OSError:
             return ""
+
+    def last_exception(self) -> str:
+        """Última exceção Java no log (a API devolve HTTP 500 sem corpo)."""
+        lines = self.log_tail(200).splitlines()
+        for i in range(len(lines) - 1, -1, -1):
+            if re.match(r"^(Caused by: )?[\w.$]+(Exception|Error)\b", lines[i]):
+                return "\n".join(lines[i:i + 4])
+        return ""
+
+    def is_running(self) -> bool:
+        return self.process is not None and self.process.poll() is None
+
+    def death_info(self) -> str:
+        """Como o processo Java terminou, para diagnóstico."""
+        code = self.process.returncode if self.process else None
+        info = f"código de saída {code}"
+        # No Windows, crashes nativos saem com NTSTATUS (ex.: 0xC0000005)
+        if code is not None and (code < 0 or code >= 0xC0000000):
+            info += f" = {code & 0xFFFFFFFF:#010x}, crash nativo da JVM"
+        crash = sorted(self.workdir.glob("hs_err_pid*.log"))
+        if crash:
+            info += f"; relatório: {crash[-1]}"
+        return f"{info}; log: {self.log_path}"
 
     def start(self) -> IPEDWebAPI:
         if not self.java:

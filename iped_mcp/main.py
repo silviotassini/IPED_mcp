@@ -29,7 +29,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from iped_mcp.config import CaseConfig
-from iped_mcp.webapi import IPEDAPIError, IPEDWebAPI, WebAPIServer
+from iped_mcp.webapi import IPEDAPIError, IPEDAPIUnavailable, IPEDWebAPI, WebAPIServer
 
 app = MCPServer(
     "iped-mcp",
@@ -70,12 +70,21 @@ class MCPState:
         self.allow_write = False
         self.server: Optional[WebAPIServer] = None
         self.api: Optional[IPEDWebAPI] = None
+        self.restarts = 0
+        self.last_death: Optional[str] = None
         self._lock = threading.Lock()
         self._search_cache: "OrderedDict[tuple, list]" = OrderedDict()
         self._stats_cache: Optional[dict] = None
 
     def get_api(self) -> IPEDWebAPI:
         with self._lock:
+            if self.server and not self.server.is_running():
+                # A API Java morreu: subir de novo com os mesmos casos em vez de falhar para sempre
+                self.last_death = self.server.death_info()
+                self.restarts += 1
+                self.server = None
+                self.api = None
+                self._search_cache.clear()
             if self.api is not None:
                 return self.api
             if self.api_url:
@@ -132,12 +141,37 @@ def _json(data) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False, default=str)
 
 
+def _with_recovery(fn, *args, **kwargs):
+    """Executar fn; se a API Java tiver morrido, reiniciá-la (em get_api) e tentar de novo uma vez."""
+    try:
+        return fn(*args, **kwargs)
+    except IPEDAPIUnavailable:
+        if not state.server or state.server.is_running():
+            raise
+    return fn(*args, **kwargs)
+
+
+def _error_text(e: Exception) -> str:
+    msg = str(e)
+    server = state.server
+    if isinstance(e, IPEDAPIUnavailable):
+        if server and not server.is_running():
+            msg += f"\nO processo Java da API terminou ({server.death_info()})."
+        elif state.last_death:
+            msg += f"\nA API já tinha sido reiniciada após terminar ({state.last_death})."
+    elif msg.startswith("HTTP 5") and server and server.is_running():
+        cause = server.last_exception()
+        msg += ("\nErro só deste item/consulta; a API continua ativa, siga com os demais."
+                + (f"\nExceção no IPED:\n{cause}" if cause else ""))
+    return msg
+
+
 async def _call(fn, *args, **kwargs):
     """Rodar uma chamada bloqueante à API sem travar o loop, convertendo erros."""
     try:
-        return await asyncio.to_thread(fn, *args, **kwargs)
+        return await asyncio.to_thread(_with_recovery, fn, *args, **kwargs)
     except (IPEDAPIError, ValueError, OSError) as e:
-        raise ToolError(str(e)) from e
+        raise ToolError(_error_text(e)) from e
 
 
 def _resolve_source(source_id: Optional[str]) -> str:
@@ -232,6 +266,9 @@ async def get_case_info() -> str:
         if state.server:
             data["java"] = state.server.java
             data["webapi_log"] = str(state.server.log_path)
+        if state.restarts:
+            data["api_restarts"] = state.restarts
+            data["last_api_death"] = state.last_death
         return data
     return _json(await _call(info))
 

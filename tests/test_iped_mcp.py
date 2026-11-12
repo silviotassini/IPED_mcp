@@ -150,7 +150,8 @@ def test_server_command(tmp_path):
     (tmp_path / "iped" / "lib").mkdir()
     srv = WebAPIServer([CaseConfig(str(tmp_path), "c1")], port=9999, java="java", java_opts=["-Xmx2g"])
     cmd = srv.command()
-    assert cmd[:4] == ["java", "-Xmx2g", "-cp", str(tmp_path / "iped" / "lib" / "*")]
+    assert cmd[0] == "java" and cmd[1].startswith("-XX:ErrorFile=")
+    assert cmd[2:5] == ["-Xmx2g", "-cp", str(tmp_path / "iped" / "lib" / "*")]
     assert "iped.engine.webapi.Main" in cmd and "--port=9999" in cmd
     sources = json.loads((srv.workdir / "sources.json").read_text(encoding="utf-8"))
     assert sources == [{"id": "c1", "path": str(tmp_path)}]
@@ -280,6 +281,55 @@ async def test_close_case(tmp_path, server):
     result = _load(await main.close_case())
     assert [c["id"] for c in result["closed"]] == ["c2"] and result["remaining"] == []
     assert _load(await main.get_case_info())["sources"] == []
+
+
+@pytest.mark.anyio
+async def test_restart_after_api_death(tmp_path, monkeypatch):
+    """Se o processo Java da API morre, a próxima chamada sobe a API de novo e repete a operação."""
+    from iped_mcp import main
+    from iped_mcp.config import CaseConfig
+    from iped_mcp.webapi import IPEDWebAPI
+
+    started = []
+
+    class FakeServer:
+        def __init__(self, cases, **kwargs):
+            self.java, self.log_path = "java", tmp_path / "webapi.log"
+            self.httpd = None
+
+        def start(self):
+            self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), FakeIPED)
+            threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+            started.append(self)
+            return IPEDWebAPI(f"http://127.0.0.1:{self.httpd.server_port}")
+
+        def is_running(self):
+            return self.httpd is not None
+
+        def death_info(self):
+            return "código de saída 1"
+
+        def stop(self):
+            if self.httpd:
+                self.httpd.shutdown()
+                self.httpd.server_close()
+                self.httpd = None
+
+    (tmp_path / "caso" / "iped" / "index").mkdir(parents=True)
+    (tmp_path / "caso" / "iped" / "lib").mkdir()
+    monkeypatch.setattr(main, "WebAPIServer", FakeServer)
+    main.state = main.MCPState()
+    main.state.cases = [CaseConfig(str(tmp_path / "caso"))]
+    try:
+        assert _load(await main.count("pix"))["count"] == 1
+        started[0].stop()  # API "caiu"
+        assert _load(await main.count("deleted:true"))["count"] == 1
+        assert len(started) == 2
+        info = _load(await main.get_case_info())
+        assert info["api_restarts"] == 1 and "saída 1" in info["last_api_death"]
+    finally:
+        main.state.shutdown()
+        main.state = main.MCPState()
 
 
 # =====================================================================
